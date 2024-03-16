@@ -1,0 +1,206 @@
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+#LOGIT
+bank <- bank_marketing[1:45211, c("age","Default","balance","Housing","Loan","day","duration","campaign","pdays","previous","YDUMMY")]
+```
+```{r}
+logitmodel <- glm(YDUMMY ~ ., data = bank, family = "binomial")
+summary(logitmodel)
+```
+```{r}
+summary(logitmodel)
+```
+```{r}
+#Perceptron
+percepbank<- bank
+
+#Convert y variable to -1 and 1
+percepbank$YDUMMY <- lapply(percepbank$YDUMMY, function(x){
+  if(x==1)
+    percepbank$YDUMMY <- 1
+  else
+    percepbank$YDUMMY <- -1
+})
+```
+```{r}
+#create training and testing data
+percepbank_index <- sample(nrow(percepbank), 0.7*nrow(percepbank))
+percepbank_train <- percepbank[percepbank_index,]
+percepbank_test <- percepbank[-percepbank_index,]
+
+#Separate the data into input and output variables 
+percepX <- percepbank_train[, c("age","Default","balance","Housing","Loan","day","duration","campaign","pdays","previous")]
+percepY <- percepbank_train$YDUMMY
+```
+```{r}
+#Create the perceptron learning algorithm
+perceptron <- function(X, y, numEpochs) {
+  results <- list()
+  w <- runif(ncol(X), -10, 10) #Initalize weights
+  
+  # For loop - number of generations(epochs) - number of times dataset is ran through
+  for(j in 1:numEpochs) {
+    predictedResult <- numeric(length=100) # Initalize predictedResult vector
+    numIncorrect = 0 # Keeps track of # of missclassified points
+    
+    # For loop - loop throught dataset
+    for(i in 1:length(y)) {
+      xi = as.numeric(unlist(X[i,])) # Convert dataframe to vector
+      predictedResult[i] = sign(w %*% xi) # Predict the point
+      
+      # If predicted point is incorrect - change weight
+      if(predictedResult[i] != y[i]) {
+        numIncorrect = numIncorrect + 1 # Add one to # of missclassified points
+        w <- w + as.numeric(y[i]) * xi # Update the weight w <- w + WiXi
+      } 
+    } 
+    # Print results of this generation(epoch)
+    cat("\nEpoch #: ", j)
+    cat("\nNumber Incorrect: ", numIncorrect)
+    cat("\nFinal Weight: ", w)
+  } 
+} 
+
+```
+```{r}
+#Run the perceptron algorithm
+perceptron(percepX,percepY, 10)
+```
+
+```{r}
+#Take the weights from the lowest incorrect epoch 
+weight <- c(-48784.47, -814.5319, -1682.785, -11683.28, -3483.024, -41807.27, 3471.932, -21067.66, 2635.363, 7085.257)
+
+#Multiply weights accordingly
+percepbank_test$Wage <- percepbank_test$age*weight[1]
+percepbank_test$WDefault <- percepbank_test$Default*weight[2]
+percepbank_test$Wbalance <- percepbank_test$balance*weight[3]
+percepbank_test$WHousing <- percepbank_test$Housing*weight[4]
+percepbank_test$WLoan <- percepbank_test$Loan*weight[5]
+percepbank_test$Wday <- percepbank_test$day*weight[6]
+percepbank_test$Wduration <- percepbank_test$duration*weight[7]
+percepbank_test$Wcampaign <- percepbank_test$campaign*weight[8]
+percepbank_test$Wpdays <- percepbank_test$pdays*weight[9]
+percepbank_test$Wprevious <- percepbank_test$previous*weight[10]
+
+
+```
+```{r}
+#Add all weights
+percepbank_test$predict <- rowSums(percepbank_test[, c("Wage","WDefault","Wbalance","WHousing",
+                                                       "WLoan","Wday","Wduration","Wcampaign",
+                                                       "Wpdays","Wprevious")])
+
+
+#Evaluate model performance
+perceppredict <- table(percepbank_test$YDUMMY == 1, percepbank_test$predict > 0) + 
+                table(percepbank_test$YDUMMY == -1, percepbank_test$predict < 0)
+perceppredict
+```
+```{r}
+#Get the accuracy rate
+sum(diag(perceppredict)) / sum(perceppredict)
+```
+####SVM
+
+```{r}
+####Support Vector Machines
+set.seed(10)
+
+#Load the library
+library(e1071)
+
+#Define dataset for SVM
+svmbank <- bank
+
+#Convert target variable into factor
+svmbank$YDUMMY <- as.factor(svmbank$YDUMMY)
+
+
+#Create training and testing dataset
+svmbank_index <- sample(nrow(svmbank), 0.7*nrow(svmbank))
+svmbank_train <- svmbank[svmbank_index, ]
+svmbank_test <- svmbank[-svmbank_index, ]
+
+#Run the SVM model
+SVM_model <- svm(YDUMMY ~ ., data = svmbank_train)
+
+#Summarize the model
+summary(SVM_model)
+
+
+#Plot the model
+plot(SVM_model, svmbank_train, balance~duration)
+
+
+#Use the model for prediction
+library(caret)
+bankpredict <- predict(SVM_model, newdata = svmbank_test[,-11], type = "response")
+confusionMatrix(bankpredict, svmbank_test$YDUMMY)
+
+```
+```{r}
+
+predicttable <- table(svmbank_test$YDUMMY == '1', bankpredict =='1')
+predicttable
+```
+```{r}
+#calculate the accuracy
+sum(diag(predicttable))/sum(predicttable)
+```
+```{r}
+#calculate the accuracy
+sum(diag(predicttable))/sum(predicttable)
+```
+
+```{r}
+library(neuralnet)
+set.seed(9)
+Bank_Index <- sample(nrow(bank), 0.7 * nrow(bank), replace = FALSE)
+Bank_Train <- bank[Bank_Index, ]
+Bank_Test <- bank[-Bank_Index, ]
+
+#Create the first neural network
+NeuralNetwork1 <- neuralnet(YDUMMY ~ age+Default+balance+Housing+Loan+day+duration+campaign+pdays+previous,Bank_Train,hidden = 4, lifesign = "minimal", linear.output = FALSE, threshold = 0.1)
+
+#Plot the neural network
+plot(NeuralNetwork1)
+```
+
+
+```{r}
+#Test the neural network 
+NeuralNetwork1.results <- compute(NeuralNetwork1, Bank_Test)
+
+results <- data.frame(actual = Bank_Test$YDUMMY, prediction = NeuralNetwork1.results$net.result)
+
+#View the results
+results$prediction <- round(results$prediction)
+results[1:15, ]
+
+#Convert the data type to factor
+Actual <- as.factor(Bank_Test$YDUMMY)
+NeuralNet_Result <- as.factor(round(results$prediction))
+
+#Build confusion matrix
+PredictTable <- table(NeuralNet_Result, Actual)
+PredictTable
+```
+```{r}
+#Calculate the accuracy
+sum(diag(PredictTable) / sum(PredictTable))
+```
+
+
+
